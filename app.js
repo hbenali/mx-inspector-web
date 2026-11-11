@@ -255,7 +255,7 @@
   function siblingLinks(domain) {
     var wrap = el('p', 'provider');
     wrap.append('Also check ' + domain + ': ');
-    [['spf', 'SPF'], ['dkim', 'DKIM'], ['dmarc', 'DMARC'], ['bimi', 'BIMI'], ['dnssec', 'DNSSEC'], ['caa', 'CAA']].forEach(function (t, i) {
+    [['email', 'Email audit'], ['spf', 'SPF'], ['dkim', 'DKIM'], ['dmarc', 'DMARC'], ['bimi', 'BIMI'], ['mtasts', 'MTA-STS'], ['dane', 'DANE'], ['dnssec', 'DNSSEC'], ['dns', 'DNS'], ['delegation', 'Delegation'], ['caa', 'CAA']].forEach(function (t, i) {
       if (i) wrap.append(' · ');
       var a = el('a', 'link', t[1]);
       a.href = 'https://' + t[0] + '.hbenali.ovh/?domain=' + encodeURIComponent(domain);
