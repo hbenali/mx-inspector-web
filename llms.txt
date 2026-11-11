@@ -1,0 +1,8 @@
+# MX Checker
+
+> Free, single-page tool to inspect a domain's DNS MX (mail exchanger) records and spot common misconfigurations.
+
+Static site (no backend, no build step, no dependencies) at https://mx.hbenali.ovh. Looks up MX records via DNS-over-HTTPS, resolves each mail host (A/AAAA), flags CNAME targets, null MX, missing addresses and duplicate priorities, detects the mail provider, and generates BIND lines.
+
+## Pages
+- [MX Checker](https://mx.hbenali.ovh/): the tool itself.
