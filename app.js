@@ -138,7 +138,7 @@
     var dup = Object.keys(prefs).filter(function (p) { return prefs[p] > 1; });
     if (dup.length) add('info', 'Several hosts share priority ' + dup.join(', ') + ': senders pick among them at random (load sharing).');
 
-    var seen = {};
+    var seen = {}, noV6 = [];
     recs.forEach(function (r) {
       if (r.host === '.') return;
       var res = resolved[r.host];
@@ -153,12 +153,13 @@
       if (!res.a.length && !res.aaaa.length) add('fail', h + ' has no A or AAAA record.');
       else {
         if (res.a.some(isPrivateV4) || res.aaaa.some(isPrivateV6)) add('fail', h + ' resolves to a private or loopback address; it is unreachable from the internet.');
-        if (!res.aaaa.length) add('info', h + ' has no IPv6 (AAAA) record.');
+        if (!res.aaaa.length) noV6.push(h);
       }
       if (res.ptr === '') add('warn', h + ': the first address has no reverse DNS (PTR); some receivers distrust such hosts.');
       if (res.tlsa) add('pass', h + ' publishes ' + res.tlsa + ' DANE TLSA record(s) for SMTP.');
       if (h === result.domain) add('info', 'The mail host is the domain apex itself (' + h + ').');
     });
+    if (noV6.length) add('info', (noV6.length === 1 ? noV6[0] + ' has' : noV6.length + ' mail hosts have') + ' no IPv6 (AAAA) record' + (noV6.length === 1 ? '.' : ' (' + noV6.join(', ') + ').'));
     if (!checks.some(function (c) { return c.level === 'fail'; })) add('pass', 'Every mail host resolves to an address.');
     if (policy) {
       add(policy.mtasts ? 'pass' : 'info', policy.mtasts ? 'MTA-STS is published (' + policy.mtasts + '): senders can require TLS to your MX hosts.' : 'No MTA-STS record (_mta-sts): TLS to your MX hosts is opportunistic and can be downgraded.');
