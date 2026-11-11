@@ -6,7 +6,7 @@ No backend, no build step, no dependencies: static HTML, CSS and one small scrip
 
 ## Features
 
-- **Lookup** a domain's MX records, sorted by priority and labelled primary or backup
+- **Lookup** a domain's MX records, sorted by priority and labeled primary or backup
 - **Host resolution**: each mail host's A/AAAA records are resolved
 - **Checks**: null MX (RFC 7505), MX target that is a CNAME or an IP, NXDOMAIN or address-less hosts, private addresses, duplicate priorities, single-MX, implicit-MX fallback to the A record
 - **Mail transport security**: reverse DNS (PTR) of each host, DANE TLSA records, MTA-STS and TLS-RPT records
