@@ -9,6 +9,8 @@ No backend, no build step, no dependencies: static HTML, CSS and one small scrip
 - **Lookup** a domain's MX records, sorted by priority and labelled primary or backup
 - **Host resolution**: each mail host's A/AAAA records are resolved
 - **Checks**: null MX (RFC 7505), MX target that is a CNAME or an IP, NXDOMAIN or address-less hosts, private addresses, duplicate priorities, single-MX, implicit-MX fallback to the A record
+- **Mail transport security**: reverse DNS (PTR) of each host, DANE TLSA records, MTA-STS and TLS-RPT records
+- **Cross-links** to the SPF, DKIM, DMARC, BIMI, DNSSEC and CAA tools for the same domain
 - **Provider detection** (Google Workspace, Microsoft 365, Proton, Fastmail, Zoho, iCloud, OVHcloud and others)
 - **Generator** with provider presets, load-from-lookup, and BIND zone-file output
 - Dark editorial design with a light mode, self-hosted fonts, PWA, strict CSP (`script-src 'self'`)

@@ -67,6 +67,39 @@
     return out;
   }
 
+  function ptrName(ip) {
+    if (ip.indexOf(':') === -1) return ip.split('.').reverse().join('.') + '.in-addr.arpa';
+    var parts = ip.split('::'), head = parts[0] ? parts[0].split(':') : [], tail = parts[1] ? parts[1].split(':') : [];
+    var fill = new Array(Math.max(0, 8 - head.length - tail.length)).fill('0');
+    var hex = head.concat(fill, tail).map(function (g) { return ('0000' + g).slice(-4); }).join('');
+    return hex.split('').reverse().join('.') + '.ip6.arpa';
+  }
+  // Extra per-host data: reverse DNS of the first address, and DANE TLSA records.
+  async function hostExtras(res) {
+    var ip = res.a[0] || res.aaaa[0];
+    res.ptr = null; res.tlsa = 0;
+    var jobs = [];
+    if (ip) jobs.push(doh(ptrName(ip), 'PTR').then(function (d) {
+      var p = (d.Answer || []).filter(function (x) { return x.type === 12; })[0];
+      res.ptr = p ? p.data.replace(/\.$/, '').toLowerCase() : '';
+    }).catch(function () { res.ptr = null; }));
+    jobs.push(doh('_25._tcp.' + res.host, 'TLSA').then(function (d) {
+      res.tlsa = (d.Answer || []).filter(function (x) { return x.type === 52; }).length;
+    }).catch(function () {}));
+    await Promise.all(jobs);
+  }
+  // Domain-level mail transport security: MTA-STS and TLS-RPT TXT records.
+  async function transportPolicy(domain) {
+    var get = function (name, re) {
+      return doh(name, 'TXT').then(function (d) {
+        var t = (d.Answer || []).filter(function (x) { return x.type === 16; }).map(function (x) { return x.data.replace(/^"|"$/g, '').replace(/"\s*"/g, ''); });
+        return t.filter(function (v) { return re.test(v); })[0] || null;
+      }).catch(function () { return null; });
+    };
+    var r = await Promise.all([get('_mta-sts.' + domain, /^v=STSv1/i), get('_smtp._tls.' + domain, /^v=TLSRPTv1/i)]);
+    return { mtasts: r[0], tlsrpt: r[1] };
+  }
+
   // Parse an MX answer "10 mail.example.com." -> {pref, host}
   function parseMX(data) {
     var m = String(data).trim().match(/^(\d+)\s+(\S+)$/);
@@ -84,7 +117,7 @@
   }
 
   // ---- Checks ----
-  function buildChecks(result, resolved) {
+  function buildChecks(result, resolved, policy) {
     var checks = [];
     var add = function (level, text) { checks.push({ level: level, text: text }); };
     var recs = result.records;
@@ -122,9 +155,15 @@
         if (res.a.some(isPrivateV4) || res.aaaa.some(isPrivateV6)) add('fail', h + ' resolves to a private or loopback address; it is unreachable from the internet.');
         if (!res.aaaa.length) add('info', h + ' has no IPv6 (AAAA) record.');
       }
+      if (res.ptr === '') add('warn', h + ': the first address has no reverse DNS (PTR); some receivers distrust such hosts.');
+      if (res.tlsa) add('pass', h + ' publishes ' + res.tlsa + ' DANE TLSA record(s) for SMTP.');
       if (h === result.domain) add('info', 'The mail host is the domain apex itself (' + h + ').');
     });
     if (!checks.some(function (c) { return c.level === 'fail'; })) add('pass', 'Every mail host resolves to an address.');
+    if (policy) {
+      add(policy.mtasts ? 'pass' : 'info', policy.mtasts ? 'MTA-STS is published (' + policy.mtasts + '): senders can require TLS to your MX hosts.' : 'No MTA-STS record (_mta-sts): TLS to your MX hosts is opportunistic and can be downgraded.');
+      add(policy.tlsrpt ? 'pass' : 'info', policy.tlsrpt ? 'TLS-RPT is published: you receive reports on TLS delivery failures.' : 'No TLS-RPT record (_smtp._tls): you will not get reports on TLS failures.');
+    }
     if (result.dnssec) add('info', 'The resolver validated the answer with DNSSEC (AD flag set).');
     return checks;
   }
@@ -208,6 +247,21 @@
       ul.append(li);
     });
     box.append(ul);
+    box.append(siblingLinks(result.domain));
+  }
+
+  // Links to the same domain in the sibling tools of the suite.
+  function siblingLinks(domain) {
+    var wrap = el('p', 'provider');
+    wrap.append('Also check ' + domain + ': ');
+    [['spf', 'SPF'], ['dkim', 'DKIM'], ['dmarc', 'DMARC'], ['bimi', 'BIMI'], ['dnssec', 'DNSSEC'], ['caa', 'CAA']].forEach(function (t, i) {
+      if (i) wrap.append(' · ');
+      var a = el('a', 'link', t[1]);
+      a.href = 'https://' + t[0] + '.hbenali.ovh/?domain=' + encodeURIComponent(domain);
+      a.target = '_blank'; a.rel = 'noopener noreferrer';
+      wrap.append(a);
+    });
+    return wrap;
   }
 
   function renderError(domain, msg) {
@@ -242,13 +296,16 @@
       var hosts = result.records.map(function (r) { return r.host; }).filter(function (h, i, a) { return h !== '.' && a.indexOf(h) === i; });
       var resolved = {};
       var fallback = null;
-      await Promise.all(hosts.map(function (h) { return resolveHost(h).then(function (x) { resolved[h] = x; }); }));
+      var policy = null;
+      await Promise.all(hosts.map(function (h) { return resolveHost(h).then(function (x) { resolved[h] = x; return hostExtras(x); }); }));
       if (!result.records.length) {
         var fb = await resolveHost(domain);
         fallback = fb.a.concat(fb.aaaa);
+      } else if (!(result.records.length === 1 && result.records[0].host === '.')) {
+        policy = await transportPolicy(domain);
       }
       lastRecords = result.records.filter(function (r) { return r.host !== '.' || result.records.length === 1; });
-      renderResult(result, resolved, buildChecks(result, resolved), fallback);
+      renderResult(result, resolved, buildChecks(result, resolved, policy), fallback);
       setView('records');
     } catch (err) {
       lastRecords = null;
